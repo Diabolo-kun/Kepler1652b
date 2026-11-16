@@ -40,7 +40,8 @@ import com.example.mpergar9.kepler1652b.ui.theme.*
 fun CampaignListScreen(
     onSelectCampaignAsMaster: (Campaign) -> Unit,
     onSelectCampaignAsPlayer: (Campaign) -> Unit,
-    onCreateCharacterForCampaign: (Campaign) -> Unit
+    onCreateCharacterForCampaign: (Campaign) -> Unit,
+    onSignOut: () -> Unit = {}
 ) {
     val campaigns by CampaignRepository.campaigns.collectAsState()
     val currentUserProfile by CampaignRepository.currentUserProfile.collectAsState()
@@ -212,10 +213,15 @@ fun CampaignListScreen(
         EditProfileDialog(
             currentName = currentUserProfile.displayName,
             profileId = currentUserProfile.id,
+            email = currentUserProfile.email,
             onDismiss = { showProfileDialog = false },
             onSave = { newName ->
                 CampaignRepository.updateProfileName(newName)
                 showProfileDialog = false
+            },
+            onSignOut = {
+                showProfileDialog = false
+                onSignOut()
             }
         )
     }
@@ -502,41 +508,56 @@ fun CampaignCard(
 fun EditProfileDialog(
     currentName: String,
     profileId: String,
+    email: String = "",
     onDismiss: () -> Unit,
-    onSave: (String) -> Unit
+    onSave: (String) -> Unit,
+    onSignOut: () -> Unit = {}
 ) {
     var nameInput by remember { mutableStateOf(currentName) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Perfil de Jugador Local", fontWeight = FontWeight.Bold, color = NeonCyan) },
+        title = { Text("Perfil de Jugador", fontWeight = FontWeight.Bold, color = NeonCyan) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    text = "Este nombre se asignará automáticamente a cualquier personaje que crees, y servirá para que el Director de Juego te identifique en la tripulación.",
+                    text = "Tu nombre de colono te identifica como Máster o Jugador en todas las campañas.",
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
                 OutlinedTextField(
                     value = nameInput,
                     onValueChange = { nameInput = it },
-                    label = { Text("Tu Nombre / Alias de Jugador") },
+                    label = { Text("Nombre / Alias de Colono") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = CyanCurvature)
                 )
+                if (email.isNotBlank()) {
+                    Text(text = "Correo: $email", fontSize = 11.sp, color = TextSecondary)
+                }
                 Surface(
                     color = VoidBlack.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Identificador de Dispositivo: $profileId",
+                        text = "ID Único de Cuenta: $profileId",
                         fontSize = 11.sp,
                         fontFamily = FontFamily.Monospace,
                         color = TextMuted,
                         modifier = Modifier.padding(8.dp)
                     )
+                }
+
+                HorizontalDivider(color = PanelBorder.copy(alpha = 0.5f))
+
+                OutlinedButton(
+                    onClick = onSignOut,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRed),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("🔒 Cerrar Sesión", fontWeight = FontWeight.Bold)
                 }
             }
         },
@@ -547,11 +568,13 @@ fun EditProfileDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = CyanCurvature, contentColor = VoidBlack)
             ) {
-                Text("Guardar Perfil", fontWeight = FontWeight.Bold)
+                Text("Guardar Cambios", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancelar", color = TextSecondary) }
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar", color = TextSecondary)
+            }
         },
         containerColor = DeepSpaceBlue
     )

@@ -7,30 +7,191 @@ import com.example.mpergar9.kepler1652b.model.InventoryItem
 import com.example.mpergar9.kepler1652b.model.SpecialStats
 import com.example.mpergar9.kepler1652b.model.UserProfile
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.PersistentCacheSettings
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 object CampaignRepository {
 
+    private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val syncJobs = ConcurrentHashMap<String, Job>()
+    private val activeCharListeners = ConcurrentHashMap<String, ListenerRegistration>()
+
     private val firestore: FirebaseFirestore? by lazy {
         try {
-            FirebaseFirestore.getInstance()
+            val instance = FirebaseFirestore.getInstance()
+            try {
+                val settings = FirebaseFirestoreSettings.Builder()
+                    .setLocalCacheSettings(PersistentCacheSettings.newBuilder().build())
+                    .build()
+                instance.firestoreSettings = settings
+            } catch (_: Exception) {}
+            instance
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private val firebaseAuth: com.google.firebase.auth.FirebaseAuth? by lazy {
+        try {
+            com.google.firebase.auth.FirebaseAuth.getInstance()
         } catch (_: Exception) {
             null
         }
     }
 
     private val _currentUserProfile = MutableStateFlow(
-        UserProfile(id = "usr-player-1", displayName = "Explorador")
+        UserProfile(id = "", displayName = "Explorador")
     )
     val currentUserProfile: StateFlow<UserProfile> = _currentUserProfile.asStateFlow()
+
+    private val _localJoinedCampaignIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _allFetchedCampaigns = MutableStateFlow<List<Campaign>>(emptyList())
+
+    fun registerUserWithEmail(
+        email: String,
+        password: String,
+        displayName: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val auth = firebaseAuth
+        if (auth == null) {
+            onResult(false, "Servicio de autenticación no disponible.")
+            return
+        }
+
+        auth.createUserWithEmailAndPassword(email, password)
+            .addOnSuccessListener { authResult ->
+                val uid = authResult.user?.uid ?: ""
+                if (uid.isNotBlank()) {
+                    val profile = UserProfile(id = uid, displayName = displayName, email = email)
+                    _currentUserProfile.value = profile
+
+                    firestore?.collection("users")?.document(uid)?.set(
+                        mapOf(
+                            "uid" to uid,
+                            "displayName" to displayName,
+                            "email" to email,
+                            "createdAt" to System.currentTimeMillis()
+                        )
+                    )
+
+                    filterUserVisibleCampaigns()
+                    onResult(true, null)
+                } else {
+                    onResult(false, "No se pudo obtener el identificador de usuario.")
+                }
+            }
+            .addOnFailureListener { exception ->
+                val msg = exception.localizedMessage ?: ""
+                if (msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)) {
+                    onResult(false, "Debes habilitar el proveedor 'Correo electrónico/Contraseña' en la consola de Firebase (Authentication > Sign-in method > Correo electrónico/Contraseña > Habilitar).")
+                } else {
+                    onResult(false, msg.ifBlank { "Error al registrar usuario." })
+                }
+            }
+    }
+
+    fun loginUserWithEmail(
+        email: String,
+        password: String,
+        onResult: (Boolean, String?) -> Unit
+    ) {
+        val auth = firebaseAuth
+        if (auth == null) {
+            onResult(false, "Servicio de autenticación no disponible.")
+            return
+        }
+
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnSuccessListener { authResult ->
+                val uid = authResult.user?.uid ?: ""
+                if (uid.isNotBlank()) {
+                    fetchUserProfileFromFirestore(uid) { fetchedProfile ->
+                        _currentUserProfile.value = fetchedProfile ?: UserProfile(id = uid, displayName = email.substringBefore("@"), email = email)
+                        filterUserVisibleCampaigns()
+                        onResult(true, null)
+                    }
+                } else {
+                    onResult(false, "Identificador no válido.")
+                }
+            }
+            .addOnFailureListener { exception ->
+                val msg = exception.localizedMessage ?: ""
+                if (msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)) {
+                    onResult(false, "Debes habilitar el proveedor 'Correo electrónico/Contraseña' en la consola de Firebase (Authentication > Sign-in method > Correo electrónico/Contraseña > Habilitar).")
+                } else {
+                    onResult(false, msg.ifBlank { "Error de autenticación." })
+                }
+            }
+    }
+
+    private fun fetchUserProfileFromFirestore(uid: String, onComplete: (UserProfile?) -> Unit) {
+        val db = firestore
+        if (db == null) {
+            onComplete(null)
+            return
+        }
+        db.collection("users").document(uid).get()
+            .addOnSuccessListener { doc ->
+                if (doc.exists()) {
+                    val name = doc.getString("displayName") ?: "Explorador"
+                    val email = doc.getString("email") ?: ""
+                    onComplete(UserProfile(id = uid, displayName = name, email = email))
+                } else {
+                    onComplete(null)
+                }
+            }
+            .addOnFailureListener {
+                onComplete(null)
+            }
+    }
+
+    fun signOut() {
+        firebaseAuth?.signOut()
+        _currentUserProfile.value = UserProfile(id = "", displayName = "Explorador", email = "")
+        _campaigns.value = emptyList()
+        _characters.value = emptyList()
+    }
+
+    fun initLocalProfile(userId: String, displayName: String, joinedCampaignIds: Set<String> = emptySet()) {
+        val currentAuth = firebaseAuth?.currentUser
+        val activeUid = currentAuth?.uid ?: userId
+        val activeEmail = currentAuth?.email ?: ""
+        
+        if (currentAuth != null) {
+            fetchUserProfileFromFirestore(activeUid) { profile ->
+                _currentUserProfile.value = profile ?: UserProfile(id = activeUid, displayName = displayName, email = activeEmail)
+                _localJoinedCampaignIds.value = joinedCampaignIds
+                filterUserVisibleCampaigns()
+            }
+        } else {
+            _currentUserProfile.value = UserProfile(id = activeUid, displayName = displayName, email = activeEmail)
+            _localJoinedCampaignIds.value = joinedCampaignIds
+            filterUserVisibleCampaigns()
+        }
+    }
 
     fun updateProfileName(newName: String) {
         val trimmed = newName.trim()
         if (trimmed.isNotEmpty()) {
             _currentUserProfile.value = _currentUserProfile.value.copy(displayName = trimmed)
+            val uid = _currentUserProfile.value.id
+            if (uid.isNotBlank()) {
+                firestore?.collection("users")?.document(uid)?.update("displayName", trimmed)
+            }
+            filterUserVisibleCampaigns()
         }
     }
 
@@ -44,11 +205,60 @@ object CampaignRepository {
         startFirestoreListeners()
     }
 
+    private fun filterUserVisibleCampaigns() {
+        val currentUserId = _currentUserProfile.value.id
+        val localJoined = _localJoinedCampaignIds.value
+
+        val visible = _allFetchedCampaigns.value.filter { camp ->
+            val isMaster = camp.masterId == currentUserId && currentUserId.isNotBlank()
+            val isJoinedInFirestore = camp.joinedPlayerIds.contains(currentUserId)
+            val isJoinedLocally = localJoined.contains(camp.id)
+            val hasCharacterInCampaign = _characters.value.any { it.campaignId == camp.id && it.playerId == currentUserId }
+
+            isMaster || isJoinedInFirestore || isJoinedLocally || hasCharacterInCampaign
+        }.map { camp ->
+            val isMaster = camp.masterId == currentUserId && currentUserId.isNotBlank()
+            camp.copy(isCurrentUserMaster = isMaster)
+        }
+
+        _campaigns.value = visible
+        updateCharacterListenersForVisibleCampaigns(visible)
+    }
+
+    private fun updateCharacterListenersForVisibleCampaigns(visibleCampaigns: List<Campaign>) {
+        val db = firestore ?: return
+        val visibleIds = visibleCampaigns.map { it.id }.toSet()
+
+        // Unsubscribe from campaigns that are no longer visible or joined
+        val toRemove = activeCharListeners.keys.filter { !visibleIds.contains(it) }
+        toRemove.forEach { id ->
+            activeCharListeners[id]?.remove()
+            activeCharListeners.remove(id)
+        }
+
+        // Subscribe ONLY to visible campaigns
+        visibleCampaigns.forEach { camp ->
+            if (!activeCharListeners.containsKey(camp.id)) {
+                val listener = db.collection("campaigns").document(camp.id)
+                    .collection("characters")
+                    .addSnapshotListener { charSnapshot, charError ->
+                        if (charError == null && charSnapshot != null) {
+                            val fetchedChars = charSnapshot.documents.mapNotNull { charDoc ->
+                                parseCharacter(charDoc, camp.id)
+                            }
+                            val existingOtherChars = _characters.value.filter { it.campaignId != camp.id }
+                            _characters.value = existingOtherChars + fetchedChars
+                        }
+                    }
+                activeCharListeners[camp.id] = listener
+            }
+        }
+    }
+
     private fun startFirestoreListeners() {
         val db = firestore ?: return
         db.collection("campaigns").addSnapshotListener { snapshot, error ->
             if (error != null || snapshot == null) return@addSnapshotListener
-            val currentUserId = _currentUserProfile.value.id
             val fetchedCampaigns = snapshot.documents.mapNotNull { doc ->
                 val id = doc.getString("id") ?: doc.id
                 val name = doc.getString("name") ?: ""
@@ -62,50 +272,22 @@ object CampaignRepository {
                 val uiStateMap = doc.get("uiState") as? Map<*, *>
                 val imageBannerId = uiStateMap?.get("imageBannerId")?.toString() ?: doc.getString("imageBannerId") ?: "kepler_orbit"
 
-                // Auto-migración si estaba en formato plano antiguo
-                if (doc.get("master") == null) {
-                    db.collection("campaigns").document(id).set(
-                        mapOf(
-                            "id" to id,
-                            "name" to name,
-                            "description" to description,
-                            "inviteCode" to inviteCode,
-                            "master" to mapOf(
-                                "masterId" to masterId,
-                                "masterName" to masterName
-                            ),
-                            "uiState" to mapOf(
-                                "imageBannerId" to imageBannerId
-                            )
-                        ),
-                        com.google.firebase.firestore.SetOptions.merge()
-                    )
-                }
+                val joinedList = (doc.get("joinedPlayerIds") as? List<*>)?.mapNotNull { it?.toString() } ?: emptyList()
 
                 Campaign(
                     id = id,
                     name = name,
                     description = description,
                     masterName = masterName,
+                    masterId = masterId,
                     inviteCode = inviteCode,
                     imageBannerId = imageBannerId,
-                    isCurrentUserMaster = masterId == currentUserId || masterName.equals(_currentUserProfile.value.displayName, true)
+                    isCurrentUserMaster = false,
+                    joinedPlayerIds = joinedList
                 )
             }
-            _campaigns.value = fetchedCampaigns
-
-            fetchedCampaigns.forEach { camp ->
-                db.collection("campaigns").document(camp.id).collection("characters")
-                    .addSnapshotListener { charSnapshot, charError ->
-                        if (charError == null && charSnapshot != null) {
-                            val fetchedChars = charSnapshot.documents.mapNotNull { charDoc ->
-                                parseCharacter(charDoc, camp.id)
-                            }
-                            val existingOtherChars = _characters.value.filter { it.campaignId != camp.id }
-                            _characters.value = existingOtherChars + fetchedChars
-                        }
-                    }
-            }
+            _allFetchedCampaigns.value = fetchedCampaigns
+            filterUserVisibleCampaigns()
         }
     }
 
@@ -205,18 +387,23 @@ object CampaignRepository {
     }
 
     fun createCampaign(name: String, description: String, masterName: String): Campaign {
+        val currentUserId = _currentUserProfile.value.id
         val effectiveMaster = masterName.ifBlank { _currentUserProfile.value.displayName }
         val newCampaign = Campaign(
             id = UUID.randomUUID().toString(),
             name = name,
             description = description,
             masterName = effectiveMaster,
+            masterId = currentUserId,
             inviteCode = "KPL-" + (1000..9999).random(),
             imageBannerId = "kepler_orbit",
-            isCurrentUserMaster = true
+            isCurrentUserMaster = true,
+            joinedPlayerIds = listOf(currentUserId)
         )
-        _campaigns.value = _campaigns.value + newCampaign
-        
+        _allFetchedCampaigns.value = _allFetchedCampaigns.value + newCampaign
+        _localJoinedCampaignIds.value = _localJoinedCampaignIds.value + newCampaign.id
+        filterUserVisibleCampaigns()
+
         firestore?.collection("campaigns")?.document(newCampaign.id)?.set(
             mapOf(
                 "id" to newCampaign.id,
@@ -224,9 +411,10 @@ object CampaignRepository {
                 "description" to newCampaign.description,
                 "inviteCode" to newCampaign.inviteCode,
                 "master" to mapOf(
-                    "masterId" to _currentUserProfile.value.id,
+                    "masterId" to currentUserId,
                     "masterName" to newCampaign.masterName
                 ),
+                "joinedPlayerIds" to listOf(currentUserId),
                 "uiState" to mapOf(
                     "imageBannerId" to newCampaign.imageBannerId
                 )
@@ -236,9 +424,11 @@ object CampaignRepository {
     }
 
     fun deleteCampaign(campaignId: String) {
-        _campaigns.value = _campaigns.value.filter { it.id != campaignId }
+        _allFetchedCampaigns.value = _allFetchedCampaigns.value.filter { it.id != campaignId }
+        _localJoinedCampaignIds.value = _localJoinedCampaignIds.value - campaignId
+        filterUserVisibleCampaigns()
         _characters.value = _characters.value.filter { it.campaignId != campaignId }
-        
+
         val db = firestore ?: return
         val campaignRef = db.collection("campaigns").document(campaignId)
         campaignRef.collection("characters").get().addOnSuccessListener { snapshot ->
@@ -254,13 +444,35 @@ object CampaignRepository {
     }
 
     fun joinCampaignByCode(code: String): Campaign? {
-        val trimmed = code.trim()
-        val found = _campaigns.value.find { it.inviteCode.equals(trimmed, ignoreCase = true) }
-        return if (found != null) {
-            val playerCampaign = found.copy(isCurrentUserMaster = false)
-            _campaigns.value = _campaigns.value.map { if (it.id == found.id) playerCampaign else it }
-            playerCampaign
-        } else null
+        val trimmed = code.trim().uppercase()
+        val currentUserId = _currentUserProfile.value.id
+
+        val found = _allFetchedCampaigns.value.find { it.inviteCode.trim().equals(trimmed, ignoreCase = true) }
+        if (found != null) {
+            _localJoinedCampaignIds.value = _localJoinedCampaignIds.value + found.id
+            firestore?.collection("campaigns")?.document(found.id)?.update(
+                "joinedPlayerIds", com.google.firebase.firestore.FieldValue.arrayUnion(currentUserId)
+            )
+            filterUserVisibleCampaigns()
+            val isMaster = found.masterId == currentUserId && currentUserId.isNotBlank()
+            return found.copy(isCurrentUserMaster = isMaster)
+        }
+        return null
+    }
+
+    fun removePlayerFromCampaign(campaignId: String, playerId: String, charId: String? = null) {
+        val db = firestore
+        if (db != null) {
+            db.collection("campaigns").document(campaignId).update(
+                "joinedPlayerIds", com.google.firebase.firestore.FieldValue.arrayRemove(playerId)
+            )
+        }
+        if (!charId.isNullOrBlank()) {
+            deleteCharacter(charId)
+        } else {
+            _characters.value = _characters.value.filter { !(it.campaignId == campaignId && it.playerId == playerId) }
+        }
+        filterUserVisibleCampaigns()
     }
 
     fun addCharacter(character: Character) {
@@ -273,61 +485,76 @@ object CampaignRepository {
             playerName = assignedPlayerName
         )
         _characters.value = _characters.value + newChar
-        syncCharacterToFirestore(newChar)
+        syncCharacterToFirestore(newChar, debounceMillis = 0L)
     }
 
-    private fun syncCharacterToFirestore(character: Character) {
+    private fun syncCharacterToFirestore(character: Character, debounceMillis: Long = 400L) {
         val db = firestore ?: return
-        val data = mapOf(
-            "id" to character.id,
-            "campaignId" to character.campaignId,
-            "playerId" to character.playerId,
-            "playerName" to character.playerName,
-            "identity" to mapOf(
-                "characterName" to character.characterName,
-                "characterClass" to character.characterClass,
-                "subclass" to character.subclass,
-                "faction" to character.faction.name
-            ),
-            "progression" to mapOf(
-                "level" to character.level,
-                "pendingLevelUps" to character.pendingLevelUps
-            ),
-            "vitals" to mapOf(
-                "isAlive" to character.isAlive,
-                "currentHp" to character.currentHp,
-                "currentSanity" to character.currentSanity,
-                "radiationLevel" to character.radiationLevel,
-                "toxicityPoison" to character.toxicityPoison,
-                "soporteVitalLevel" to character.soporteVitalLevel,
-                "statusEffects" to character.statusEffects
-            ),
-            "stats" to mapOf(
-                "FUE" to character.stats.fue,
-                "PER" to character.stats.per,
-                "END" to character.stats.end,
-                "CAR" to character.stats.car,
-                "AGI" to character.stats.agi,
-                "INT" to character.stats.int,
-                "SUE" to character.stats.sue
-            ),
-            "skills" to character.skills,
-            "unlockedPerks" to character.unlockedPerks,
-            "inventory" to character.inventory.map { item ->
-                mapOf(
-                    "id" to item.id,
-                    "name" to item.name,
-                    "description" to item.description,
-                    "size" to item.size,
-                    "statBonusStat" to (item.statBonusStat ?: ""),
-                    "statBonusValue" to item.statBonusValue,
-                    "credits" to item.credits
-                )
+
+        syncJobs[character.id]?.cancel()
+
+        val task = Runnable {
+            val data = mapOf(
+                "id" to character.id,
+                "campaignId" to character.campaignId,
+                "playerId" to character.playerId,
+                "playerName" to character.playerName,
+                "identity" to mapOf(
+                    "characterName" to character.characterName,
+                    "characterClass" to character.characterClass,
+                    "subclass" to character.subclass,
+                    "faction" to character.faction.name
+                ),
+                "progression" to mapOf(
+                    "level" to character.level,
+                    "pendingLevelUps" to character.pendingLevelUps
+                ),
+                "vitals" to mapOf(
+                    "isAlive" to character.isAlive,
+                    "currentHp" to character.currentHp,
+                    "currentSanity" to character.currentSanity,
+                    "radiationLevel" to character.radiationLevel,
+                    "toxicityPoison" to character.toxicityPoison,
+                    "soporteVitalLevel" to character.soporteVitalLevel,
+                    "statusEffects" to character.statusEffects
+                ),
+                "stats" to mapOf(
+                    "FUE" to character.stats.fue,
+                    "PER" to character.stats.per,
+                    "END" to character.stats.end,
+                    "CAR" to character.stats.car,
+                    "AGI" to character.stats.agi,
+                    "INT" to character.stats.int,
+                    "SUE" to character.stats.sue
+                ),
+                "skills" to character.skills,
+                "unlockedPerks" to character.unlockedPerks,
+                "inventory" to character.inventory.map { item ->
+                    mapOf(
+                        "id" to item.id,
+                        "name" to item.name,
+                        "description" to item.description,
+                        "size" to item.size,
+                        "statBonusStat" to (item.statBonusStat ?: ""),
+                        "statBonusValue" to item.statBonusValue,
+                        "credits" to item.credits
+                    )
+                }
+            )
+            db.collection("campaigns").document(character.campaignId)
+                .collection("characters").document(character.id)
+                .set(data)
+        }
+
+        if (debounceMillis <= 0L) {
+            task.run()
+        } else {
+            val job = repositoryScope.launch {
+                delay(debounceMillis)
+                task.run()
             }
-        )
-        db.collection("campaigns").document(character.campaignId)
-            .collection("characters").document(character.id)
-            .set(data)
+            syncJobs[character.id] = job
+        }
     }
 
     fun addItemToInventory(charId: String, name: String, description: String, size: Int, statBonusStat: String?, statBonusValue: Int, credits: Int = 0) {

@@ -15,9 +15,11 @@ data class Campaign(
     val name: String = "",
     val description: String = "",
     val masterName: String = "Director de Juego",
+    val masterId: String = "",
     val inviteCode: String = "",
-    val imageBannerId: String = "kepler_orbit", // Referencia a fondo sci-fi
-    val isCurrentUserMaster: Boolean = false
+    val imageBannerId: String = "kepler_orbit",
+    val isCurrentUserMaster: Boolean = false,
+    val joinedPlayerIds: List<String> = emptyList()
 )
 
 data class SpecialStats(
@@ -65,8 +67,9 @@ enum class CharacterFaction(val label: String) {
 }
 
 data class UserProfile(
-    val id: String = "usr-player-1",
-    val displayName: String = "Explorador"
+    val id: String = "",
+    val displayName: String = "Explorador",
+    val email: String = ""
 )
 
 data class Character(

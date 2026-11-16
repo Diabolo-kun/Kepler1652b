@@ -17,6 +17,7 @@ import com.example.mpergar9.kepler1652b.ui.screens.*
 import com.example.mpergar9.kepler1652b.ui.screens.master.MasterCharacterDetailScreen
 
 object NavRoutes {
+    const val AUTH = "auth"
     const val CAMPAIGN_LIST = "campaign_list"
     const val MASTER_DASHBOARD = "master_dashboard/{campaignId}"
     const val MASTER_CHARACTER_DETAIL = "master_character_detail/{campaignId}/{characterId}"
@@ -37,13 +38,26 @@ fun KeplerNavHost(
 ) {
     val campaigns by CampaignRepository.campaigns.collectAsState()
     val characters by CampaignRepository.characters.collectAsState()
+    val currentUserProfile by CampaignRepository.currentUserProfile.collectAsState()
+
+    val startDestination = if (currentUserProfile.id.isBlank()) NavRoutes.AUTH else NavRoutes.CAMPAIGN_LIST
 
     NavHost(
         navController = navController,
-        startDestination = NavRoutes.CAMPAIGN_LIST,
+        startDestination = startDestination,
         enterTransition = { fadeIn(animationSpec = tween(300)) },
         exitTransition = { fadeOut(animationSpec = tween(300)) }
     ) {
+        composable(NavRoutes.AUTH) {
+            AuthScreen(
+                onAuthSuccess = {
+                    navController.navigate(NavRoutes.CAMPAIGN_LIST) {
+                        popUpTo(NavRoutes.AUTH) { inclusive = true }
+                    }
+                }
+            )
+        }
+
         composable(NavRoutes.CAMPAIGN_LIST) {
             CampaignListScreen(
                 onSelectCampaignAsMaster = { campaign ->
@@ -54,6 +68,12 @@ fun KeplerNavHost(
                 },
                 onCreateCharacterForCampaign = { campaign ->
                     navController.navigate(NavRoutes.characterCreation(campaign.id))
+                },
+                onSignOut = {
+                    CampaignRepository.signOut()
+                    navController.navigate(NavRoutes.AUTH) {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             )
         }

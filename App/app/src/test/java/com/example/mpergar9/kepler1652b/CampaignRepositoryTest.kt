@@ -31,7 +31,10 @@ class CampaignRepositoryTest {
         assertTrue(campaign.isCurrentUserMaster)
         assertEquals("Misión Kepler", campaign.name)
 
-        // Probar unirse por código de invitación
+        // Cambiar a un segundo usuario para simular la unión desde otro teléfono
+        CampaignRepository.initLocalProfile("usr-player-2", "Capitán Miller")
+
+        // Probar unirse por código de invitación como segundo usuario
         val joined = CampaignRepository.joinCampaignByCode(campaign.inviteCode)
         assertNotNull(joined)
         assertEquals(campaign.id, joined?.id)
