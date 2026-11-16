@@ -1,3 +1,26 @@
 <resources>
-    <string name="app_name">Kepler1652b</string>
+    <string name="app_name">Kepler-1652b</string>
+    <string name="app_subtitle">Terminal de Campañas &amp; Mando Espacial</string>
+
+    <!-- Estado Vital -->
+    <string name="status_alive">💚 VIVO</string>
+    <string name="status_dead">💀 FALLECIDO</string>
+    <string name="status_user_pj">TU PJ</string>
+
+    <!-- Diálogos -->
+    <string name="dialog_cancel">Cancelar</string>
+    <string name="dialog_confirm">Confirmar</string>
+    <string name="dialog_delete">Eliminar</string>
+    <string name="dialog_close">Cerrar</string>
+    <string name="dialog_delete_campaign_title">¿Eliminar Campaña?</string>
+    <string name="dialog_delete_campaign_msg">¿Seguro que quieres eliminarla?</string>
+    <string name="dialog_delete_character_title">¿Eliminar Personaje?</string>
+    <string name="dialog_crew_title">👥 Tripulación Conectada</string>
+
+    <!-- Constantes Vitales -->
+    <string name="vital_physical_integrity">Integridad Física</string>
+    <string name="vital_radiation">Radiación</string>
+    <string name="vital_toxicity">Toxicidad</string>
+    <string name="vital_life_support">Soporte Vital</string>
+    <string name="vital_sanity">Cordura</string>
 </resources>

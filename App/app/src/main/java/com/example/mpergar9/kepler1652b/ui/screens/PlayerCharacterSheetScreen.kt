@@ -22,6 +22,7 @@ import com.example.mpergar9.kepler1652b.data.KeplerGameData
 import com.example.mpergar9.kepler1652b.model.Campaign
 import com.example.mpergar9.kepler1652b.model.Character
 import com.example.mpergar9.kepler1652b.model.SpecialStats
+import com.example.mpergar9.kepler1652b.ui.components.*
 import com.example.mpergar9.kepler1652b.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -56,10 +57,11 @@ fun PlayerCharacterSheetScreen(
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("← Menú", color = CyanCurvature) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
-        containerColor = VoidBlack
+        containerColor = VoidBlack,
+        modifier = Modifier.statusBarsPadding()
     ) { padding ->
         if (character == null) {
             Box(
@@ -104,18 +106,7 @@ fun PlayerCharacterSheetScreen(
                                 Text(character.subclass, fontSize = 11.sp, color = TextSecondary)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Surface(
-                                    color = if (character.isAlive) RadiationGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
-                                    shape = RoundedCornerShape(4.dp)
-                                ) {
-                                    Text(
-                                        text = if (character.isAlive) "💚 Vivo" else "💀 Fallecido",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (character.isAlive) RadiationGreen else DangerRed,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
-                                }
+                                AliveStatusBadge(isAlive = character.isAlive)
                                 
                                 // Nivel con indicador de punto rojo si es el dueño y hay pendientes de reclamar
                                 Box(
@@ -146,14 +137,7 @@ fun PlayerCharacterSheetScreen(
 
                         // Barra de Salud
                         val effectiveStats = character.effectiveStats
-                        val hpRatio = (character.currentHp.toFloat() / effectiveStats.maxHp).coerceIn(0f, 1f)
-                        Text("Integridad Física: ${character.currentHp} / ${effectiveStats.maxHp} PV", fontSize = 11.sp, color = TextPrimary)
-                        LinearProgressIndicator(
-                            progress = { hpRatio },
-                            modifier = Modifier.fillMaxWidth().height(6.dp),
-                            color = if (hpRatio < 0.3f) DangerRed else if (hpRatio < 0.6f) WarningAmber else RadiationGreen,
-                            trackColor = HullGray
-                        )
+                        HealthProgressBar(currentHp = character.currentHp, maxHp = effectiveStats.maxHp)
 
                         // Radiación, Veneno, O2 y Cordura en 2x2 grid
                         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {

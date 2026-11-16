@@ -8,6 +8,9 @@ val DeepSpaceBlue = Color(0xFF0F172A)
 val HullGray = Color(0xFF1E293B)
 val PanelBorder = Color(0xFF334155)
 
+// Color de la Barra de Notificaciones / Estado (Aplica a todas las pantallas de la app)
+val StatusBarColor = DeepSpaceBlue
+
 // Acentos de Estado
 val CyanCurvature = Color(0xFF38BDF8)
 val NeonCyan = Color(0xFF06B6D4)

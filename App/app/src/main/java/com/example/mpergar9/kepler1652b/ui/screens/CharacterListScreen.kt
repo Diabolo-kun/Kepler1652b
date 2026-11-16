@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.example.mpergar9.kepler1652b.data.CampaignRepository
 import com.example.mpergar9.kepler1652b.model.Campaign
 import com.example.mpergar9.kepler1652b.model.Character
+import com.example.mpergar9.kepler1652b.ui.components.*
 import com.example.mpergar9.kepler1652b.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +78,7 @@ fun CharacterListScreen(
                         Text("👥", fontSize = 16.sp)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
         floatingActionButton = {
@@ -89,13 +90,13 @@ fun CharacterListScreen(
                 Text("+ Nuevo Personaje", fontWeight = FontWeight.Bold)
             }
         },
-        containerColor = VoidBlack
+        containerColor = VoidBlack,
+        modifier = Modifier.statusBarsPadding()
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .statusBarsPadding()
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -198,18 +199,7 @@ fun CharacterRowCard(
                             color = TextPrimary
                         )
                         if (isMine) {
-                            Surface(
-                                color = NeonCyan.copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(4.dp)
-                            ) {
-                                Text(
-                                    text = "TU PJ",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = NeonCyan,
-                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                                )
-                            }
+                            UserCharacterBadge()
                         }
                     }
                     Text(
@@ -219,64 +209,22 @@ fun CharacterRowCard(
                     )
                 }
 
-                Text(
-                    text = if (character.isAlive) "💚 VIVO" else "💀 FALLECIDO",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (character.isAlive) RadiationGreen else DangerRed
-                )
+                AliveStatusBadge(isAlive = character.isAlive)
             }
 
             HorizontalDivider(color = PanelBorder.copy(alpha = 0.4f))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "PV: ${character.currentHp} / ${character.stats.maxHp}",
-                    fontSize = 12.sp,
-                    color = if (character.currentHp < character.stats.maxHp / 2) DangerRed else TextSecondary,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "🧠 ${character.currentSanity}%",
-                    fontSize = 11.sp,
-                    color = PlasmaPurple,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = "☢️ ${character.radiationLevel}%",
-                    fontSize = 11.sp,
-                    color = WarningAmber
-                )
-                Text(
-                    text = "☣️ ${character.toxicityPoison}%",
-                    fontSize = 11.sp,
-                    color = RadiationGreen
-                )
-                Text(
-                    text = "🛡️ ${character.soporteVitalLevel}%",
-                    fontSize = 11.sp,
-                    color = if (character.soporteVitalLevel < 30) DangerRed else CyanCurvature
-                )
-            }
+            VitalStatsRow(
+                radiationLevel = character.radiationLevel,
+                toxicityLevel = character.toxicityPoison,
+                soporteVitalLevel = character.soporteVitalLevel,
+                sanityLevel = character.currentSanity
+            )
 
             if (character.statusEffects.isNotEmpty()) {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     character.statusEffects.forEach { effect ->
-                        Surface(
-                            color = WarningAmber.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = "⚠️ $effect",
-                                fontSize = 9.sp,
-                                color = WarningAmber,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            )
-                        }
+                        StatusEffectChip(effectName = effect)
                     }
                 }
             }

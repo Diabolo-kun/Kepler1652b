@@ -139,7 +139,7 @@ fun CharacterCreationScreen(
                     }
                 },
                 navigationIcon = {},
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
         containerColor = VoidBlack,

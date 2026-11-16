@@ -21,6 +21,7 @@ import com.example.mpergar9.kepler1652b.data.KeplerGameData
 import com.example.mpergar9.kepler1652b.model.Campaign
 import com.example.mpergar9.kepler1652b.model.Character
 import com.example.mpergar9.kepler1652b.model.SpecialStats
+import com.example.mpergar9.kepler1652b.ui.components.*
 import com.example.mpergar9.kepler1652b.ui.screens.master.*
 import com.example.mpergar9.kepler1652b.ui.theme.*
 
@@ -29,13 +30,15 @@ import com.example.mpergar9.kepler1652b.ui.theme.*
 fun MasterDashboardScreen(
     campaign: Campaign,
     onSelectCharacterForDetail: (Character) -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onDeleteCampaign: () -> Unit = onBack
 ) {
     val allCharacters by CampaignRepository.characters.collectAsState()
     val campaignChars = allCharacters.filter { it.campaignId == campaign.id }
     val sortedChars = campaignChars.sortedBy { it.characterName.lowercase() }
 
     var characterToDelete by remember { mutableStateOf<Character?>(null) }
+    var showDeleteCampaignDialog by remember { mutableStateOf(false) }
 
     // Estados para control global de la nave (Equilibrio en 0)
     var globalRadDelta by remember { mutableFloatStateOf(0f) }
@@ -62,7 +65,7 @@ fun MasterDashboardScreen(
                         PlayerListDialog(campaign = campaign, characters = campaignChars, onDismiss = { showPlayerList = false })
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
         containerColor = VoidBlack,
@@ -120,7 +123,7 @@ fun MasterDashboardScreen(
                         )
 
                         GlobalDeltaAdjustmentBar(
-                            title = "☣️ Toxicidad / Gases Ambientales",
+                            title = "☣️ Toxicidad",
                             delta = globalToxDelta,
                             color = DangerRed,
                             onDeltaChange = { globalToxDelta = it },
@@ -222,29 +225,58 @@ fun MasterDashboardScreen(
                     )
                 }
             }
+
+            // 3. ELIMINAR CAMPAÑA (SOLO SI ES MASTER)
+            if (campaign.isCurrentUserMaster) {
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Eliminar campaña",
+                            color = DangerRed,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable { showDeleteCampaignDialog = true }
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 
     characterToDelete?.let { campaignChar ->
-        AlertDialog(
-            onDismissRequest = { characterToDelete = null },
-            title = { Text("¿Eliminar Personaje?", fontWeight = FontWeight.Bold, color = DangerRed) },
-            text = { Text("¿Estás seguro de eliminar a '${campaignChar.characterName}' de la campaña?", color = TextSecondary) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        CampaignRepository.deleteCharacter(campaignChar.id)
-                        characterToDelete = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed, contentColor = TextPrimary)
-                ) {
-                    Text("Eliminar", fontWeight = FontWeight.Bold)
-                }
+        DeleteConfirmationDialog(
+            title = "¿Eliminar Personaje?",
+            message = "¿Estás seguro de eliminar a '${campaignChar.characterName}' de la campaña?",
+            confirmText = "Eliminar",
+            cancelText = "Cancelar",
+            onConfirm = {
+                CampaignRepository.deleteCharacter(campaignChar.id)
+                characterToDelete = null
             },
-            dismissButton = {
-                TextButton(onClick = { characterToDelete = null }) { Text("Cancelar", color = TextSecondary) }
+            onDismiss = { characterToDelete = null }
+        )
+    }
+
+    if (showDeleteCampaignDialog) {
+        DeleteConfirmationDialog(
+            title = "¿Eliminar Campaña?",
+            message = "¿Seguro que quieres eliminarla?",
+            confirmText = "Sí",
+            cancelText = "Cancelar",
+            onConfirm = {
+                showDeleteCampaignDialog = false
+                CampaignRepository.deleteCampaign(campaign.id)
+                onDeleteCampaign()
             },
-            containerColor = DeepSpaceBlue
+            onDismiss = { showDeleteCampaignDialog = false }
         )
     }
 }
@@ -276,18 +308,7 @@ fun MasterCharacterSummaryCard(
                             fontSize = 15.sp,
                             color = if (character.isAlive) TextPrimary else TextMuted
                         )
-                        Surface(
-                            color = if (character.isAlive) RadiationGreen.copy(alpha = 0.2f) else DangerRed.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(4.dp)
-                        ) {
-                            Text(
-                                text = if (character.isAlive) "💚 VIVO" else "💀 FALLECIDO",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (character.isAlive) RadiationGreen else DangerRed,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                            )
-                        }
+                        AliveStatusBadge(isAlive = character.isAlive)
                     }
                     Text(
                         text = "${character.characterClass} • Jugador: ${character.playerName} (Nv.${character.level})",
@@ -305,60 +326,15 @@ fun MasterCharacterSummaryCard(
             }
 
             // Barra de vida
-            val hpRatio = (character.currentHp.toFloat() / character.stats.maxHp).coerceIn(0f, 1f)
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Integridad Física", fontSize = 10.sp, color = TextMuted)
-                    Text("${character.currentHp} / ${character.stats.maxHp} PV", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = if (hpRatio < 0.3f) DangerRed else TextPrimary)
-                }
-                LinearProgressIndicator(
-                    progress = { hpRatio },
-                    modifier = Modifier.fillMaxWidth().height(6.dp),
-                    color = if (hpRatio < 0.3f) DangerRed else if (hpRatio < 0.6f) WarningAmber else RadiationGreen,
-                    trackColor = HullGray
-                )
-            }
+            HealthProgressBar(currentHp = character.currentHp, maxHp = character.stats.maxHp)
 
-            // 4 variables debajo (solo iconos y porcentajes, sin etiquetas de texto)
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("☢️ ${character.radiationLevel}%", fontSize = 10.sp, color = WarningAmber)
-                Text("☣️ ${character.toxicityPoison}%", fontSize = 10.sp, color = DangerRed)
-                Text("🛡️ ${character.soporteVitalLevel}%", fontSize = 10.sp, color = CyanCurvature)
-                Text("🧠 ${character.currentSanity}%", fontSize = 10.sp, color = PlasmaPurple)
-            }
+            // 4 variables ambientales/vitales
+            VitalStatsRow(
+                radiationLevel = character.radiationLevel,
+                toxicityLevel = character.toxicityPoison,
+                soporteVitalLevel = character.soporteVitalLevel,
+                sanityLevel = character.currentSanity
+            )
         }
     }
-}
-
-@Composable
-fun PlayerListDialog(
-    campaign: Campaign,
-    characters: List<Character>,
-    onDismiss: () -> Unit
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("👥 Tripulación Conectada", fontWeight = FontWeight.Bold, color = CyanCurvature) },
-        text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.height(200.dp)) {
-                items(characters) { ch ->
-                    Surface(color = VoidBlack, shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
-                        Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Column {
-                                Text(ch.characterName, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 12.sp)
-                                Text("${ch.characterClass} • ${ch.playerName}", color = TextSecondary, fontSize = 10.sp)
-                            }
-                            Text(if (ch.isAlive) "💚" else "💀", fontSize = 11.sp)
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = CyanCurvature, contentColor = VoidBlack)) {
-                Text("Cerrar", fontWeight = FontWeight.Bold)
-            }
-        },
-        containerColor = DeepSpaceBlue
-    )
 }

@@ -98,7 +98,7 @@ fun CampaignListScreen(
                         }
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
         floatingActionButton = {

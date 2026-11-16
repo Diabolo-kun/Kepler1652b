@@ -30,6 +30,7 @@ import com.example.mpergar9.kepler1652b.data.PerkDefinition
 import com.example.mpergar9.kepler1652b.model.Campaign
 import com.example.mpergar9.kepler1652b.model.Character
 import com.example.mpergar9.kepler1652b.model.InventoryItem
+import com.example.mpergar9.kepler1652b.ui.components.*
 import com.example.mpergar9.kepler1652b.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,7 +56,7 @@ fun MasterCharacterDetailScreen(
                     }
                 },
                 navigationIcon = {},
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepSpaceBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
         containerColor = VoidBlack,
@@ -495,25 +496,16 @@ fun MasterCharacterDetailScreen(
     }
 
     itemToDelete?.let { item ->
-        AlertDialog(
-            onDismissRequest = { itemToDelete = null },
-            title = { Text("¿Eliminar Objeto?", fontWeight = FontWeight.Bold, color = DangerRed) },
-            text = { Text("¿Estás seguro de retirar '${item.name}' del inventario?", color = TextSecondary) },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        CampaignRepository.removeItemFromInventory(liveChar.id, item.id)
-                        itemToDelete = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = DangerRed, contentColor = TextPrimary)
-                ) {
-                    Text("Eliminar", fontWeight = FontWeight.Bold)
-                }
+        DeleteConfirmationDialog(
+            title = "¿Eliminar Objeto?",
+            message = "¿Estás seguro de retirar '${item.name}' del inventario?",
+            confirmText = "Eliminar",
+            cancelText = "Cancelar",
+            onConfirm = {
+                CampaignRepository.removeItemFromInventory(liveChar.id, item.id)
+                itemToDelete = null
             },
-            dismissButton = {
-                TextButton(onClick = { itemToDelete = null }) { Text("Cancelar", color = TextSecondary) }
-            },
-            containerColor = DeepSpaceBlue
+            onDismiss = { itemToDelete = null }
         )
     }
 }
