@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "643427545192",
+    "project_id": "kepler-1652b",
+    "storage_bucket": "kepler-1652b.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:643427545192:android:63a7ffca7e15e36de34bdd",
+        "android_client_info": {
+          "package_name": "com.example.mpergar9.kepler1652b"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDSNkuZfM1K4wjAAQcCue6rPTLNpN643ek"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,9 @@
+- `[x]` 1. Resumen de tarjeta de campaña: tarjeta entera como botón único
+- `[x]` 2. Listado de personajes: botón "👑 Máster" a la izquierda de conectados, sin botón "Volver"
+- `[x]` 3. Panel de Máster: eliminación de botón "Salir" (navegación fluida por botón de atrás)
+- `[x]` 4. Tarjetas resumen de Máster: solo iconos y porcentajes para variables ambientales
+- `[x]` 5. Pestañas de detalle de personaje (Máster): `ScrollableTabRow` clásico con scroll fluido
+- `[x]` 6. Habilidades de Máster: botones `[-5], [-1], [nivel], [+1], [+5]` situados debajo del nombre
+- `[x]` 7. Estado vital de Máster: adición de estado "Incapacitado"
+- `[x]` 8. Perks de Máster: desglose completo de requisitos faltantes y botón de Forzar
+- `[x]` 9. Compilación y verificación final (`app:assembleDebug`)
