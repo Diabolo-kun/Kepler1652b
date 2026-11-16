@@ -71,7 +71,11 @@ fun KeplerNavHost(
                         navController.navigate(NavRoutes.masterCharacterDetail(campaign.id, char.id))
                     },
                     onBack = { navController.popBackStack() },
-                    onDeleteCampaign = { navController.popBackStack() }
+                    onDeleteCampaign = {
+                        navController.navigate(NavRoutes.CAMPAIGN_LIST) {
+                            popUpTo(NavRoutes.CAMPAIGN_LIST) { inclusive = true }
+                        }
+                    }
                 )
             }
         }

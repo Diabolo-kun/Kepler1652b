@@ -45,6 +45,7 @@ fun MasterCharacterDetailScreen(
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Vitals & Nivel, 1: SPECIAL, 2: Habilidades, 3: Perks, 4: Inventario
     var itemToDelete by remember { mutableStateOf<InventoryItem?>(null) }
+    var showDeleteCharacterDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -56,6 +57,11 @@ fun MasterCharacterDetailScreen(
                     }
                 },
                 navigationIcon = {},
+                actions = {
+                    IconButton(onClick = { showDeleteCharacterDialog = true }) {
+                        Text("🗑️", fontSize = 16.sp)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
         },
@@ -506,6 +512,21 @@ fun MasterCharacterDetailScreen(
                 itemToDelete = null
             },
             onDismiss = { itemToDelete = null }
+        )
+    }
+
+    if (showDeleteCharacterDialog) {
+        DeleteConfirmationDialog(
+            title = "¿Eliminar Personaje?",
+            message = "¿Estás seguro de eliminar a '${liveChar.characterName}' de la campaña?",
+            confirmText = "Eliminar",
+            cancelText = "Cancelar",
+            onConfirm = {
+                showDeleteCharacterDialog = false
+                CampaignRepository.deleteCharacter(liveChar.id)
+                onBack()
+            },
+            onDismiss = { showDeleteCharacterDialog = false }
         )
     }
 }

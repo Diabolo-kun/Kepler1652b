@@ -220,8 +220,7 @@ fun MasterDashboardScreen(
                 items(sortedChars) { char ->
                     MasterCharacterSummaryCard(
                         character = char,
-                        onClick = { onSelectCharacterForDetail(char) },
-                        onDelete = { characterToDelete = char }
+                        onClick = { onSelectCharacterForDetail(char) }
                     )
                 }
             }
@@ -284,8 +283,7 @@ fun MasterDashboardScreen(
 @Composable
 fun MasterCharacterSummaryCard(
     character: Character,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
+    onClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -315,13 +313,6 @@ fun MasterCharacterSummaryCard(
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
-                }
-
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Text("🗑️", fontSize = 12.sp)
                 }
             }
 

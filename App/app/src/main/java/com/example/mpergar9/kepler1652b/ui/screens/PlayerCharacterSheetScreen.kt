@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.mpergar9.kepler1652b.data.CampaignRepository
@@ -39,10 +40,12 @@ fun PlayerCharacterSheetScreen(
 
     val character = campaignChars.find { it.id == selectedCharId } ?: selectedCharacter ?: campaignChars.firstOrNull()
 
-    // Verificación de seguridad: solo el propietario de este personaje puede subirlo de nivel
+    // Verificación de permisos: solo el propietario o el máster pueden modificar/subir de nivel/borrar el personaje
     val isOwner = character != null && (character.playerId == currentUserProfile.id || character.playerName.equals(currentUserProfile.displayName, true))
+    val canModify = isOwner || campaign.isCurrentUserMaster
 
     var showLevelUpDialog by remember { mutableStateOf(false) }
+    var showDeleteCharacterDialog by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Habilidades, 1: Perks, 2: Inventario
 
     Scaffold(
@@ -54,8 +57,13 @@ fun PlayerCharacterSheetScreen(
                         Text("Campaña: ${campaign.name}", fontSize = 12.sp, color = TextSecondary)
                     }
                 },
-                navigationIcon = {
-                    TextButton(onClick = onBack) { Text("← Menú", color = CyanCurvature) }
+                navigationIcon = {},
+                actions = {
+                    if (character != null && canModify) {
+                        IconButton(onClick = { showDeleteCharacterDialog = true }) {
+                            Text("🗑️", fontSize = 16.sp)
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = StatusBarColor)
             )
@@ -108,9 +116,9 @@ fun PlayerCharacterSheetScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 AliveStatusBadge(isAlive = character.isAlive)
                                 
-                                // Nivel con indicador de punto rojo si es el dueño y hay pendientes de reclamar
+                                // Nivel con indicador de punto rojo si tiene permiso de edición y hay subidas pendientes
                                 Box(
-                                    modifier = Modifier.clickable(enabled = isOwner && character.pendingLevelUps > 0) {
+                                    modifier = Modifier.clickable(enabled = canModify && character.pendingLevelUps > 0) {
                                         showLevelUpDialog = true
                                     }
                                 ) {
@@ -123,7 +131,7 @@ fun PlayerCharacterSheetScreen(
                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                         )
                                     }
-                                    if (isOwner && character.pendingLevelUps > 0) {
+                                    if (canModify && character.pendingLevelUps > 0) {
                                         Box(
                                             modifier = Modifier
                                                 .size(8.dp)
@@ -142,12 +150,12 @@ fun PlayerCharacterSheetScreen(
                         // Radiación, Veneno, O2 y Cordura en 2x2 grid
                         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("☢️ Rad: ${character.radiationLevel}%", fontSize = 11.sp, color = WarningAmber, modifier = Modifier.weight(1f))
-                                Text("☣️ Tox: ${character.toxicityPoison}%", fontSize = 11.sp, color = DangerRed, modifier = Modifier.weight(1f))
+                                Text("☢️ Radiación: ${character.radiationLevel}%", fontSize = 11.sp, color = WarningAmber, modifier = Modifier.weight(1f))
+                                Text("☣️ Toxicidad: ${character.toxicityPoison}%", fontSize = 11.sp, color = DangerRed, modifier = Modifier.weight(1f))
                             }
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("🛡️ ${character.soporteVitalLevel}%", fontSize = 11.sp, color = if (character.soporteVitalLevel < 30) DangerRed else CyanCurvature, modifier = Modifier.weight(1f))
-                                Text("🧠 ${character.currentSanity}%", fontSize = 11.sp, color = PlasmaPurple, modifier = Modifier.weight(1f))
+                                Text("🛡️ Soporte Vital: ${character.soporteVitalLevel}%", fontSize = 11.sp, color = if (character.soporteVitalLevel < 30) DangerRed else CyanCurvature, modifier = Modifier.weight(1f))
+                                Text("🧠 Cordura: ${character.currentSanity}%", fontSize = 11.sp, color = PlasmaPurple, modifier = Modifier.weight(1f))
                             }
                         }
 
@@ -179,7 +187,7 @@ fun PlayerCharacterSheetScreen(
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Especificaciones", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        text = { Text("Perks", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 2,
@@ -352,13 +360,29 @@ fun PlayerCharacterSheetScreen(
             }
         )
     }
+
+    if (showDeleteCharacterDialog && character != null) {
+        DeleteConfirmationDialog(
+            title = "¿Eliminar Personaje?",
+            message = "¿Estás seguro de eliminar a '${character.characterName}' de la campaña?",
+            confirmText = "Eliminar",
+            cancelText = "Cancelar",
+            onConfirm = {
+                showDeleteCharacterDialog = false
+                CampaignRepository.deleteCharacter(character.id)
+                onBack()
+            },
+            onDismiss = { showDeleteCharacterDialog = false }
+        )
+    }
 }
+
+enum class LevelUpChoiceType { PERK, SPECIAL }
 
 /**
  * Diálogo secuencial ordenado para la Subida de Nivel del Jugador:
- * 1. Reparto de 15 puntos de habilidad (con posibilidad de sumar y restar libremente).
- * 2. Selección de 1 Perk (muestra los que ya puede desbloquear y los que está cerca de desbloquear).
- * 3. Mejora de 1 atributo SPECIAL.
+ * Paso 1: Reparto de 15 puntos de habilidad.
+ * Paso 2: Selección exclusiva entre 1 Perk O la mejora +1 de 1 Atributo SPECIAL.
  */
 @Composable
 fun PlayerLevelUpDialog(
@@ -366,20 +390,19 @@ fun PlayerLevelUpDialog(
     onDismiss: () -> Unit,
     onClaim: (newStats: SpecialStats, newSkills: Map<String, Int>, newPerks: List<String>) -> Unit
 ) {
-    var step by remember { mutableIntStateOf(1) } // 1: Habilidades, 2: Perks, 3: SPECIAL
+    var step by remember { mutableIntStateOf(1) } // 1: Habilidades, 2: Perk O SPECIAL
 
-    // Copias editables durante el nivel
-    var currentStats by remember { mutableStateOf(character.stats) }
+    val currentStats = remember { mutableStateOf(character.stats) }
     val currentSkills = remember { mutableStateMapOf<String, Int>().apply { putAll(character.skills) } }
     val currentPerks = remember { mutableStateListOf<String>().apply { addAll(character.unlockedPerks) } }
 
-    // 15 puntos de habilidad a repartir
     var availableSkillPoints by remember { mutableIntStateOf(15) }
-    // Guardamos los incrementos locales para poder restar/sumar libremente
     val skillIncrements = remember { mutableStateMapOf<String, Int>() }
 
+    var selectedChoiceType by remember { mutableStateOf<LevelUpChoiceType?>(null) }
     var selectedNewPerk by remember { mutableStateOf<String?>(null) }
-    var specialChosenStat by remember { mutableStateOf<String?>(null) }
+    var selectedSpecialStat by remember { mutableStateOf<String?>(null) }
+    var showSpecialSelectorDialog by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -387,11 +410,7 @@ fun PlayerLevelUpDialog(
             Column {
                 Text("⭐ SUBIDA DE NIVEL (Nivel ${character.level})", color = WarningAmber, fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 Text(
-                    text = when(step) {
-                        1 -> "Paso 1/3: Reparte 15 Puntos de Habilidad"
-                        2 -> "Paso 2/3: Selecciona 1 Perk Disponible"
-                        else -> "Paso 3/3: Mejora 1 Atributo SPECIAL"
-                    },
+                    text = if (step == 1) "Paso 1/2: Reparte 15 Puntos de Habilidad" else "Paso 2/2: Selecciona 1 Perk o 1 Atributo SPECIAL (+1)",
                     fontSize = 12.sp,
                     color = NeonCyan
                 )
@@ -404,73 +423,144 @@ fun PlayerLevelUpDialog(
                         Text("Tienes 15 puntos libres. Puedes sumar y restar libremente para organizarte antes de continuar:", fontSize = 11.sp, color = TextSecondary)
                         Text("Puntos disponibles: $availableSkillPoints pts", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (availableSkillPoints > 0) WarningAmber else RadiationGreen)
                         
-                        LazyColumn(modifier = Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LazyColumn(modifier = Modifier.height(280.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(KeplerGameData.ALL_SKILLS) { skill ->
                                 val baseVal = character.skills[skill] ?: 0
                                 val added = skillIncrements[skill] ?: 0
                                 val totalVal = baseVal + added
                                 val statKey = KeplerGameData.SKILL_ASSOCIATED_STAT[skill] ?: "INT"
-                                val cap = currentStats.getSkillCap(statKey)
+                                val cap = currentStats.value.getSkillCap(statKey)
 
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(skill, fontSize = 11.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                        Text(
+                                            text = skill,
+                                            fontSize = 11.sp,
+                                            color = TextPrimary,
+                                            fontWeight = FontWeight.Medium,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                         Text("$totalVal / $cap ($statKey)", fontSize = 10.sp, color = TextMuted)
                                     }
                                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                         FilledTonalButton(
                                             onClick = {
-                                                if (added >= 5) {
-                                                    skillIncrements[skill] = added - 5
-                                                    availableSkillPoints += 5
+                                                if (added >= 1) {
+                                                    skillIncrements[skill] = added - 1
+                                                    availableSkillPoints += 1
                                                 }
                                             },
-                                            enabled = added >= 5,
-                                            contentPadding = PaddingValues(horizontal = 6.dp),
-                                            modifier = Modifier.height(26.dp)
-                                        ) { Text("-5", fontSize = 10.sp) }
+                                            enabled = added >= 1,
+                                            contentPadding = PaddingValues(horizontal = 4.dp),
+                                            modifier = Modifier.height(28.dp).width(36.dp)
+                                        ) { Text("-1", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
 
-                                        Text("$added", fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, color = CyanCurvature, modifier = Modifier.width(28.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                        Surface(
+                                            color = HullGray,
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier.width(32.dp).height(28.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "+$added",
+                                                    fontSize = 11.sp,
+                                                    fontFamily = FontFamily.Monospace,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (added > 0) CyanCurvature else TextMuted
+                                                )
+                                            }
+                                        }
 
                                         FilledTonalButton(
                                             onClick = {
-                                                if (availableSkillPoints >= 5 && totalVal + 5 <= cap && totalVal + 5 <= 100) {
-                                                    skillIncrements[skill] = added + 5
-                                                    availableSkillPoints -= 5
+                                                if (availableSkillPoints >= 1 && totalVal + 1 <= cap && totalVal + 1 <= 100) {
+                                                    skillIncrements[skill] = added + 1
+                                                    availableSkillPoints -= 1
                                                 }
                                             },
-                                            enabled = availableSkillPoints >= 5 && totalVal + 5 <= cap && totalVal + 5 <= 100,
-                                            contentPadding = PaddingValues(horizontal = 6.dp),
-                                            modifier = Modifier.height(26.dp)
-                                        ) { Text("+5", fontSize = 10.sp) }
+                                            enabled = availableSkillPoints >= 1 && totalVal + 1 <= cap && totalVal + 1 <= 100,
+                                            contentPadding = PaddingValues(horizontal = 4.dp),
+                                            modifier = Modifier.height(28.dp).width(36.dp)
+                                        ) { Text("+1", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                                     }
                                 }
                             }
                         }
                     }
                     2 -> {
-                        // Calcular habilidades con los incrementos del paso 1
                         val tempSkills = currentSkills.mapValues { (sk, base) -> base + (skillIncrements[sk] ?: 0) }
 
-                        // Perks desbloqueables vs cercanos a desbloquear (a menos de 15 pts)
-                        Text("Perks que puedes desbloquear o estás cerca de alcanzar (a menos de 15 pts):", fontSize = 11.sp, color = TextSecondary)
+                        Text("Selecciona solo uno de los dos: un Perk o aumentar +1 a un atributo SPECIAL:", fontSize = 11.sp, color = TextSecondary)
 
-                        LazyColumn(modifier = Modifier.height(280.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LazyColumn(modifier = Modifier.height(280.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            // Opción 1: Aumento de Atributo SPECIAL
+                            item {
+                                Surface(
+                                    color = if (selectedChoiceType == LevelUpChoiceType.SPECIAL) CyanCurvature.copy(alpha = 0.2f) else VoidBlack,
+                                    shape = RoundedCornerShape(6.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(1.dp, if (selectedChoiceType == LevelUpChoiceType.SPECIAL) CyanCurvature else PanelBorder, RoundedCornerShape(6.dp))
+                                        .clickable {
+                                            showSpecialSelectorDialog = true
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "➕ Subir +1 a un Atributo SPECIAL",
+                                                fontWeight = FontWeight.Bold,
+                                                color = NeonCyan,
+                                                fontSize = 12.sp
+                                            )
+                                            Text(
+                                                text = if (selectedChoiceType == LevelUpChoiceType.SPECIAL && selectedSpecialStat != null)
+                                                    "Seleccionado: +1 a $selectedSpecialStat"
+                                                else
+                                                    "Aumenta 1 punto en FUE, INT, AGI, etc. (en lugar de coger un perk)",
+                                                fontSize = 11.sp,
+                                                color = if (selectedChoiceType == LevelUpChoiceType.SPECIAL) WarningAmber else TextSecondary
+                                            )
+                                        }
+                                        if (selectedChoiceType == LevelUpChoiceType.SPECIAL && selectedSpecialStat != null) {
+                                            Text("✅", fontSize = 14.sp)
+                                        }
+                                    }
+                                }
+                            }
+
+                            item {
+                                HorizontalDivider(color = PanelBorder.copy(alpha = 0.5f))
+                                Text("O elige un Perk Disponible:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = WarningAmber)
+                            }
+
                             items(KeplerGameData.UNLOCKABLE_PERKS) { perk ->
                                 val alreadyUnlocked = currentPerks.contains(perk.name)
                                 val canUnlockNow = perk.requirements.all { (sk, reqVal) -> (tempSkills[sk] ?: 0) >= reqVal }
                                 val isClose = perk.requirements.all { (sk, reqVal) -> ((tempSkills[sk] ?: 0) + 15) >= reqVal }
+                                val isSelected = selectedChoiceType == LevelUpChoiceType.PERK && selectedNewPerk == perk.name
 
                                 if (!alreadyUnlocked && (canUnlockNow || isClose)) {
                                     Surface(
-                                        color = if (selectedNewPerk == perk.name) CyanCurvature.copy(alpha = 0.2f) else VoidBlack,
+                                        color = if (isSelected) CyanCurvature.copy(alpha = 0.2f) else VoidBlack,
                                         shape = RoundedCornerShape(6.dp),
-                                        modifier = Modifier.fillMaxWidth().border(1.dp, if (selectedNewPerk == perk.name) CyanCurvature else PanelBorder, RoundedCornerShape(6.dp))
-                                            .clickable { selectedNewPerk = perk.name }
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .border(1.dp, if (isSelected) CyanCurvature else PanelBorder, RoundedCornerShape(6.dp))
+                                            .clickable(enabled = canUnlockNow) {
+                                                selectedChoiceType = LevelUpChoiceType.PERK
+                                                selectedNewPerk = perk.name
+                                                selectedSpecialStat = null
+                                            }
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -488,26 +578,6 @@ fun PlayerLevelUpDialog(
                             }
                         }
                     }
-                    3 -> {
-                        Text("Elige 1 atributo SPECIAL para subir +1 (máx 10):", fontSize = 12.sp, color = TextSecondary)
-                        LazyColumn(modifier = Modifier.height(260.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            items(listOf("FUE", "PER", "END", "CAR", "AGI", "INT", "SUE")) { stat ->
-                                val statVal = currentStats.getStat(stat)
-                                val isSelected = specialChosenStat == stat
-                                OutlinedButton(
-                                    onClick = { specialChosenStat = stat },
-                                    enabled = statVal < 10,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.outlinedButtonColors(
-                                        contentColor = if (isSelected) VoidBlack else CyanCurvature,
-                                        containerColor = if (isSelected) CyanCurvature else Color.Transparent
-                                    )
-                                ) {
-                                    Text("Subir +1 a $stat ($statVal/10)${if (isSelected) " (Seleccionado)" else ""}", fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal)
-                                }
-                            }
-                        }
-                    }
                 }
             }
         },
@@ -521,9 +591,9 @@ fun PlayerLevelUpDialog(
                         Text("← Anterior")
                     }
                 }
-                if (step < 3) {
+                if (step == 1) {
                     Button(
-                        onClick = { step += 1 },
+                        onClick = { step = 2 },
                         colors = ButtonDefaults.buttonColors(containerColor = CyanCurvature, contentColor = VoidBlack)
                     ) {
                         Text("Siguiente →")
@@ -531,25 +601,31 @@ fun PlayerLevelUpDialog(
                 } else {
                     Button(
                         onClick = {
-                            // Aplicar cambios finales
                             val finalSkills = currentSkills.mapValues { (sk, base) -> base + (skillIncrements[sk] ?: 0) }
                             val finalPerks = currentPerks.toMutableList()
-                            selectedNewPerk?.let { if (!finalPerks.contains(it)) finalPerks.add(it) }
-                            val finalStats = when (specialChosenStat?.uppercase()) {
-                                "FUE" -> currentStats.copy(fue = (currentStats.fue + 1).coerceAtMost(10))
-                                "PER" -> currentStats.copy(per = (currentStats.per + 1).coerceAtMost(10))
-                                "END" -> currentStats.copy(end = (currentStats.end + 1).coerceAtMost(10))
-                                "CAR" -> currentStats.copy(car = (currentStats.car + 1).coerceAtMost(10))
-                                "AGI" -> currentStats.copy(agi = (currentStats.agi + 1).coerceAtMost(10))
-                                "INT" -> currentStats.copy(int = (currentStats.int + 1).coerceAtMost(10))
-                                "SUE" -> currentStats.copy(sue = (currentStats.sue + 1).coerceAtMost(10))
-                                else -> currentStats
+                            if (selectedChoiceType == LevelUpChoiceType.PERK && selectedNewPerk != null) {
+                                if (!finalPerks.contains(selectedNewPerk!!)) finalPerks.add(selectedNewPerk!!)
+                            }
+                            val finalStats = if (selectedChoiceType == LevelUpChoiceType.SPECIAL && selectedSpecialStat != null) {
+                                when (selectedSpecialStat!!.uppercase()) {
+                                    "FUE" -> currentStats.value.copy(fue = (currentStats.value.fue + 1).coerceAtMost(10))
+                                    "PER" -> currentStats.value.copy(per = (currentStats.value.per + 1).coerceAtMost(10))
+                                    "END" -> currentStats.value.copy(end = (currentStats.value.end + 1).coerceAtMost(10))
+                                    "CAR" -> currentStats.value.copy(car = (currentStats.value.car + 1).coerceAtMost(10))
+                                    "AGI" -> currentStats.value.copy(agi = (currentStats.value.agi + 1).coerceAtMost(10))
+                                    "INT" -> currentStats.value.copy(int = (currentStats.value.int + 1).coerceAtMost(10))
+                                    "SUE" -> currentStats.value.copy(sue = (currentStats.value.sue + 1).coerceAtMost(10))
+                                    else -> currentStats.value
+                                }
+                            } else {
+                                currentStats.value
                             }
                             onClaim(finalStats, finalSkills, finalPerks)
                         },
+                        enabled = selectedChoiceType != null && (selectedNewPerk != null || selectedSpecialStat != null),
                         colors = ButtonDefaults.buttonColors(containerColor = WarningAmber, contentColor = VoidBlack)
                     ) {
-                        Text("Reclamar Subida", fontWeight = FontWeight.Bold)
+                        Text("Reclamar Nivel", fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -559,4 +635,40 @@ fun PlayerLevelUpDialog(
         },
         containerColor = DeepSpaceBlue
     )
+
+    if (showSpecialSelectorDialog) {
+        AlertDialog(
+            onDismissRequest = { showSpecialSelectorDialog = false },
+            title = { Text("Selecciona Atributo SPECIAL (+1)", color = CyanCurvature, fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("FUE", "PER", "END", "CAR", "AGI", "INT", "SUE").forEach { stat ->
+                        val curVal = currentStats.value.getStat(stat)
+                        OutlinedButton(
+                            onClick = {
+                                selectedChoiceType = LevelUpChoiceType.SPECIAL
+                                selectedSpecialStat = stat
+                                selectedNewPerk = null
+                                showSpecialSelectorDialog = false
+                            },
+                            enabled = curVal < 10,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (selectedSpecialStat == stat) CyanCurvature else Color.Transparent,
+                                contentColor = if (selectedSpecialStat == stat) VoidBlack else TextPrimary
+                            )
+                        ) {
+                            Text("Subir +1 a $stat ($curVal/10)${if (selectedSpecialStat == stat) " (Seleccionado)" else ""}", fontWeight = if (selectedSpecialStat == stat) FontWeight.Bold else FontWeight.Normal)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSpecialSelectorDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            },
+            containerColor = DeepSpaceBlue
+        )
+    }
 }
