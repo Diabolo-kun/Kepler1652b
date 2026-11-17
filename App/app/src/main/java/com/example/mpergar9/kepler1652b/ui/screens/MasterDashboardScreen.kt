@@ -40,12 +40,6 @@ fun MasterDashboardScreen(
     var characterToDelete by remember { mutableStateOf<Character?>(null) }
     var showDeleteCampaignDialog by remember { mutableStateOf(false) }
 
-    // Estados para control global de la nave (Equilibrio en 0)
-    var globalRadDelta by remember { mutableFloatStateOf(0f) }
-    var globalToxDelta by remember { mutableFloatStateOf(0f) }
-    var globalSoporteDelta by remember { mutableFloatStateOf(0f) }
-    var globalSanityDelta by remember { mutableFloatStateOf(0f) }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -81,114 +75,10 @@ fun MasterDashboardScreen(
         ) {
             // 1. PANEL AMBIENTAL GLOBAL DE LA NAVE (AFECTA A TODA LA SALA)
             item {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, WarningAmber.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
-                    colors = CardDefaults.cardColors(containerColor = DeepSpaceBlue),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                text = "🛸 CONTROL AMBIENTAL GLOBAL DE LA NAVE",
-                                fontWeight = FontWeight.Bold,
-                                color = WarningAmber,
-                                fontSize = 14.sp,
-                                letterSpacing = 1.sp
-                            )
-                            Text(
-                                text = "Consola de emergencias • Afecta a toda la tripulación (${campaignChars.size} personas)",
-                                fontSize = 12.sp,
-                                color = NeonCyan,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-
-                        Text(
-                            text = "Variables en equilibrio (0). Ajusta con [-1] y [+1] y pulsa Aplicar para subir o bajar unidades a todos los tripulantes:",
-                            fontSize = 11.sp,
-                            color = TextSecondary
-                        )
-
-                        GlobalDeltaAdjustmentBar(
-                            title = "☢️ Radiación Colectiva",
-                            delta = globalRadDelta,
-                            color = WarningAmber,
-                            onDeltaChange = { globalRadDelta = it },
-                            onApply = {
-                                CampaignRepository.applyGlobalRadiationDelta(campaign.id, globalRadDelta.toInt())
-                                globalRadDelta = 0f
-                            }
-                        )
-
-                        GlobalDeltaAdjustmentBar(
-                            title = "☣️ Toxicidad",
-                            delta = globalToxDelta,
-                            color = DangerRed,
-                            onDeltaChange = { globalToxDelta = it },
-                            onApply = {
-                                CampaignRepository.applyGlobalToxicityDelta(campaign.id, globalToxDelta.toInt())
-                                globalToxDelta = 0f
-                            }
-                        )
-
-                        GlobalDeltaAdjustmentBar(
-                            title = "🛡️ Soporte Vital de la Nave",
-                            delta = globalSoporteDelta,
-                            color = CyanCurvature,
-                            onDeltaChange = { globalSoporteDelta = it },
-                            onApply = {
-                                CampaignRepository.applyGlobalSoporteVitalDelta(campaign.id, globalSoporteDelta.toInt())
-                                globalSoporteDelta = 0f
-                            }
-                        )
-
-                        GlobalDeltaAdjustmentBar(
-                            title = "🧠 Cordura Colectiva",
-                            delta = globalSanityDelta,
-                            color = PlasmaPurple,
-                            onDeltaChange = { globalSanityDelta = it },
-                            onApply = {
-                                CampaignRepository.applyGlobalSanityDelta(campaign.id, globalSanityDelta.toInt())
-                                globalSanityDelta = 0f
-                            }
-                        )
-
-                        HorizontalDivider(color = PanelBorder.copy(alpha = 0.5f))
-
-                        Text("Activar / Desactivar Estados de Alarma a toda la tripulación:", fontSize = 12.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
-                        val globalAlarmEffects = listOf("Asfixia", "Pánico", "Estrés Criogénico", "Fuga Tóxica", "Descompresión")
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            globalAlarmEffects.forEach { effect ->
-                                Button(
-                                    onClick = {
-                                        CampaignRepository.applyGlobalStatusEffect(campaign.id, effect, applyToAll = true)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = HullGray),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                    modifier = Modifier.height(30.dp)
-                                ) {
-                                    Text("+ $effect", fontSize = 11.sp, color = TextPrimary)
-                                }
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    CampaignRepository.clearAllGlobalStatusEffects(campaign.id)
-                                },
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = RadiationGreen),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) {
-                                Text("Limpiar Estados a Todos", fontSize = 11.sp)
-                            }
-                        }
-                    }
-                }
+                MasterGlobalEnvironmentPanel(
+                    campaign = campaign,
+                    totalCrewSize = campaignChars.size
+                )
             }
 
             // 2. LISTADO ALFABÉTICO DE PERSONAJES
@@ -217,7 +107,7 @@ fun MasterDashboardScreen(
                     }
                 }
             } else {
-                items(sortedChars) { char ->
+                items(sortedChars, key = { it.id }) { char ->
                     MasterCharacterSummaryCard(
                         character = char,
                         onClick = { onSelectCharacterForDetail(char) }
@@ -317,7 +207,7 @@ fun MasterCharacterSummaryCard(
             }
 
             // Barra de vida
-            HealthProgressBar(currentHp = character.currentHp, maxHp = character.stats.maxHp)
+            HealthProgressBar(currentHp = character.currentHp, maxHp = character.effectiveStats.maxHp)
 
             // 4 variables ambientales/vitales
             VitalStatsRow(

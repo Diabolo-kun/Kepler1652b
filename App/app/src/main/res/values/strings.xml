@@ -23,4 +23,7 @@
     <string name="vital_toxicity">Toxicidad</string>
     <string name="vital_life_support">Soporte Vital</string>
     <string name="vital_sanity">Cordura</string>
+
+    <!-- Auth -->
+    <string name="google_web_client_id" translatable="false">643427545192-ssr3kpq5so5vvshr8pgg040pssfs27tp.apps.googleusercontent.com</string>
 </resources>

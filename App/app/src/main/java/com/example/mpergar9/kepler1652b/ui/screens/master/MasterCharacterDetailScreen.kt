@@ -172,12 +172,13 @@ fun MasterCharacterDetailScreen(
                                                 ) { Text("-1", fontSize = 10.sp) }
 
                                                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                                    val maxHp = liveChar.effectiveStats.maxHp
                                                     Surface(color = HullGray, shape = RoundedCornerShape(4.dp)) {
                                                         Text(
-                                                            text = "${liveChar.currentHp} / ${liveChar.stats.maxHp}",
+                                                            text = "${liveChar.currentHp} / $maxHp",
                                                             fontSize = 12.sp,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = if (liveChar.currentHp < liveChar.stats.maxHp / 2) DangerRed else CyanCurvature,
+                                                            color = if (liveChar.currentHp < maxHp / 2) DangerRed else CyanCurvature,
                                                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                                             fontFamily = FontFamily.Monospace
                                                         )
@@ -267,7 +268,7 @@ fun MasterCharacterDetailScreen(
                                 item {
                                     Text("Habilidades de Campo (0 - 100)", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 13.sp)
                                 }
-                                items(KeplerGameData.ALL_SKILLS) { skill ->
+                                items(KeplerGameData.ALL_SKILLS, key = { it }) { skill ->
                                     val cur = liveChar.skills[skill] ?: 0
                                     val statKey = KeplerGameData.SKILL_ASSOCIATED_STAT[skill] ?: "INT"
                                     val cap = liveChar.stats.getSkillCap(statKey)
@@ -393,7 +394,7 @@ fun MasterCharacterDetailScreen(
                                 Text("Inventario ($currentCount / $maxSlots huecos):", fontSize = 13.sp, color = CyanCurvature, fontWeight = FontWeight.Bold)
                                 
                                 LazyColumn(modifier = Modifier.height(130.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    items(liveChar.inventory) { item ->
+                                    items(liveChar.inventory, key = { it.id }) { item ->
                                         Surface(color = VoidBlack, shape = RoundedCornerShape(4.dp), modifier = Modifier.fillMaxWidth()) {
                                             Row(
                                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp).fillMaxWidth(),
@@ -467,9 +468,9 @@ fun MasterCharacterDetailScreen(
                                 Button(
                                     onClick = {
                                         if (itemName.isNotBlank()) {
-                                            val sz = itemSize.toIntOrNull() ?: 1
+                                            val sz = (itemSize.toIntOrNull() ?: 1).coerceAtLeast(1)
                                             val bVal = statBonusVal.toIntOrNull() ?: 0
-                                            val creds = itemCredits.toIntOrNull() ?: 0
+                                            val creds = (itemCredits.toIntOrNull() ?: 0).coerceAtLeast(0)
                                             CampaignRepository.addItemToInventory(
                                                 charId = liveChar.id,
                                                 name = itemName.trim(),
@@ -549,8 +550,7 @@ fun MasterPerkRowDetail(liveChar: Character, perk: PerkDefinition) {
                 Button(
                     onClick = {
                         if (hasPerk) {
-                            val newPerks = liveChar.unlockedPerks.filter { it != perk.name }
-                            CampaignRepository.claimLevelUp(liveChar.id, liveChar.stats, liveChar.skills, newPerks)
+                            CampaignRepository.removePerk(liveChar.id, perk.name)
                         } else {
                             CampaignRepository.unlockPerk(liveChar.id, perk.name)
                         }

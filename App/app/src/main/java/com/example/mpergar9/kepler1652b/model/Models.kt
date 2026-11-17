@@ -53,6 +53,18 @@ data class SpecialStats(
         return reqs.all { (stat, minVal) -> getStat(stat) >= minVal }
     }
 
+    fun withIncrement(statName: String, delta: Int, min: Int = 1, max: Int = 10): SpecialStats =
+        when (statName.uppercase()) {
+            "FUE" -> copy(fue = (fue + delta).coerceIn(min, max))
+            "PER" -> copy(per = (per + delta).coerceIn(min, max))
+            "END" -> copy(end = (end + delta).coerceIn(min, max))
+            "CAR" -> copy(car = (car + delta).coerceIn(min, max))
+            "AGI" -> copy(agi = (agi + delta).coerceIn(min, max))
+            "INT" -> copy(int = (int + delta).coerceIn(min, max))
+            "SUE" -> copy(sue = (sue + delta).coerceIn(min, max))
+            else -> this
+        }
+
     // PV Máximos = 20 + (END * 5) + (FUE * 2)
     val maxHp: Int get() = 20 + (end * 5) + (fue * 2)
 
@@ -93,9 +105,11 @@ data class Character(
     val unlockedPerks: List<String> = emptyList(),
     val statusPrivilege: String? = null, // Privilegio de estatus (para Acompañante)
     val bodyModifications: String = "", // Estético / lore
-    val isAlive: Boolean = true, // Identifica si el personaje está vivo o fallecido
-    val pendingLevelUps: Int = 0, // Cantidad de subidas de nivel pendientes por reclamar por el jugador
-    val inventory: List<InventoryItem> = emptyList() // Inventario / equipo del personaje
+    val isAlive: Boolean = true, // Identifies if character is alive or deceased
+    val pendingLevelUps: Int = 0, // Pending level ups
+    val inventory: List<InventoryItem> = emptyList(), // Inventory items
+    val activeCampaignId: String? = null, // Campaign ID where this character is currently assigned
+    val activeCampaignName: String? = null // Name of campaign where character is assigned
 ) {
     val oxygenLevel: Int get() = soporteVitalLevel
 

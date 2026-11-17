@@ -40,10 +40,15 @@ fun CharacterListScreen(
     onBack: () -> Unit
 ) {
     val allCharacters by CampaignRepository.characters.collectAsState()
+    val savedVault by CampaignRepository.savedUserCharacters.collectAsState()
     val currentUserProfile by CampaignRepository.currentUserProfile.collectAsState()
     val campaignChars = allCharacters.filter { it.campaignId == campaign.id }
 
     var showPlayerListDialog by remember { mutableStateOf(false) }
+    var showSelectSavedCharDialog by remember { mutableStateOf(false) }
+
+    // Personajes disponibles en el baúl personal que no están asignados a ninguna campaña activa
+    val availableSavedChars = savedVault.filter { it.activeCampaignId.isNullOrBlank() }
 
     // Filtro: 0 = Toda la Tripulación, 1 = Mis Personajes
     var filterMode by remember { mutableIntStateOf(0) }
@@ -83,7 +88,13 @@ fun CharacterListScreen(
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = onCreateNewCharacter,
+                onClick = {
+                    if (availableSavedChars.isNotEmpty()) {
+                        showSelectSavedCharDialog = true
+                    } else {
+                        onCreateNewCharacter()
+                    }
+                },
                 containerColor = CyanCurvature,
                 contentColor = VoidBlack
             ) {
@@ -149,7 +160,7 @@ fun CharacterListScreen(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    items(displayedChars) { char ->
+                    items(displayedChars, key = { it.id }) { char ->
                         val isMine = char.playerId == currentUserProfile.id || char.playerName.equals(currentUserProfile.displayName, ignoreCase = true)
                         CharacterRowCard(
                             character = char,
@@ -167,6 +178,70 @@ fun CharacterListScreen(
             campaign = campaign,
             characters = campaignChars,
             onDismiss = { showPlayerListDialog = false }
+        )
+    }
+
+    if (showSelectSavedCharDialog) {
+        AlertDialog(
+            onDismissRequest = { showSelectSavedCharDialog = false },
+            title = { Text("Asignar Personaje de tu Baúl", fontWeight = FontWeight.Bold, color = CyanCurvature, fontSize = 15.sp) },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Selecciona un personaje disponible de tu baúl para unirte a '${campaign.name}' o crea uno nuevo:",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.heightIn(max = 200.dp)
+                    ) {
+                        items(availableSavedChars, key = { it.id }) { savedChar ->
+                            OutlinedButton(
+                                onClick = {
+                                    showSelectSavedCharDialog = false
+                                    CampaignRepository.assignSavedCharacterToCampaign(campaign.id, savedChar)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, PanelBorder)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(savedChar.characterName, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("Nivel ${savedChar.level} • ${savedChar.characterClass}", fontSize = 11.sp, color = TextSecondary)
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = PanelBorder.copy(alpha = 0.5f))
+
+                    Button(
+                        onClick = {
+                            showSelectSavedCharDialog = false
+                            onCreateNewCharacter()
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = CyanCurvature, contentColor = VoidBlack)
+                    ) {
+                        Text("+ Crear Nuevo Personaje desde Cero", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showSelectSavedCharDialog = false }) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            },
+            containerColor = DeepSpaceBlue
         )
     }
 }

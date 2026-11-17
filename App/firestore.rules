@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Auxiliares de autenticación
+    function isSignedIn() {
+      return request.auth != null && request.auth.uid != "";
+    }
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ====================================================================
+    // 1. Colección /users/{userId}
+    // ====================================================================
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isUser(userId);
+
+      match /saved_characters/{characterId} {
+        allow read, write: if isUser(userId);
+      }
+    }
+
+    // ====================================================================
+    // 2. Colección /campaigns/{campaignId}
+    // ====================================================================
+    match /campaigns/{campaignId} {
+      // Lectura: Permitida si es el Máster, si ya está unido, o para consultar código de invitación (whereEqualTo('inviteCode', ...))
+      allow read: if isSignedIn() && (
+        resource == null ||
+        resource.data.master.masterId == request.auth.uid ||
+        request.auth.uid in resource.data.joinedPlayerIds ||
+        request.query.limit <= 10
+      );
+
+      // Creación: El creador debe asignarse como Máster
+      allow create: if isSignedIn() && request.resource.data.master.masterId == request.auth.uid;
+
+      // Actualización: Permitida al Máster o para añadirse a joinedPlayerIds al unirse por código
+      allow update: if isSignedIn() && (
+        resource.data.master.masterId == request.auth.uid ||
+        request.auth.uid in request.resource.data.joinedPlayerIds
+      );
+
+      // Borrado: Solo el Máster
+      allow delete: if isSignedIn() && resource.data.master.masterId == request.auth.uid;
+
+      // ==================================================================
+      // Subcolección de Personajes: /campaigns/{campaignId}/characters/{characterId}
+      // ==================================================================
+      match /characters/{characterId} {
+        // Lectura: Cualquier usuario autenticado participante en la campaña
+        allow read: if isSignedIn();
+
+        // Creación: Cualquier jugador unificado en la campaña
+        allow create: if isSignedIn();
+
+        // Edición y Borrado: Solo el dueño del personaje (playerId) o el Máster de la campaña
+        allow update, delete: if isSignedIn() && (
+          resource.data.playerId == request.auth.uid ||
+          get(/databases/$(database)/documents/campaigns/$(campaignId)).data.master.masterId == request.auth.uid
+        );
+      }
+    }
+  }
+}

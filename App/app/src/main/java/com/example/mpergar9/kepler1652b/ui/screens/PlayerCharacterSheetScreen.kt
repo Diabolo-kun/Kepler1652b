@@ -37,6 +37,9 @@ fun PlayerCharacterSheetScreen(
     val currentUserProfile by CampaignRepository.currentUserProfile.collectAsState()
     val campaignChars = allCharacters.filter { it.campaignId == campaign.id }
     var selectedCharId by remember { mutableStateOf(selectedCharacter?.id ?: campaignChars.firstOrNull()?.id ?: "") }
+    LaunchedEffect(selectedCharacter?.id) {
+        selectedCharacter?.id?.let { selectedCharId = it }
+    }
 
     val character = campaignChars.find { it.id == selectedCharId } ?: selectedCharacter ?: campaignChars.firstOrNull()
 
@@ -211,7 +214,7 @@ fun PlayerCharacterSheetScreen(
                                     item {
                                         Text("HABILIDADES DE CAMPO (0 - 100)", fontWeight = FontWeight.Bold, color = NeonCyan, fontSize = 13.sp)
                                     }
-                                    items(KeplerGameData.ALL_SKILLS) { skill ->
+                                    items(KeplerGameData.ALL_SKILLS, key = { it }) { skill ->
                                         val points = character.skills[skill] ?: 0
                                         val associatedStat = KeplerGameData.SKILL_ASSOCIATED_STAT[skill] ?: "INT"
                                         Row(
@@ -250,7 +253,7 @@ fun PlayerCharacterSheetScreen(
                                         }
                                     }
 
-                                    items(character.unlockedPerks) { perkName ->
+                                    items(character.unlockedPerks, key = { it }) { perkName ->
                                         val perkInfo = KeplerGameData.UNLOCKABLE_PERKS.find { it.name.equals(perkName, ignoreCase = true) }
                                         Surface(color = VoidBlack, shape = RoundedCornerShape(6.dp), modifier = Modifier.fillMaxWidth()) {
                                             Column(modifier = Modifier.padding(10.dp)) {
@@ -314,7 +317,7 @@ fun PlayerCharacterSheetScreen(
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
                                             modifier = Modifier.fillMaxWidth().weight(1f)
                                         ) {
-                                            items(character.inventory) { item ->
+                                            items(character.inventory, key = { it.id }) { item ->
                                                 Surface(
                                                     color = VoidBlack,
                                                     shape = RoundedCornerShape(8.dp),
@@ -350,7 +353,7 @@ fun PlayerCharacterSheetScreen(
         }
     }
 
-    if (showLevelUpDialog && isOwner && character != null) {
+    if (showLevelUpDialog && canModify && character != null) {
         PlayerLevelUpDialog(
             character = character,
             onDismiss = { showLevelUpDialog = false },
@@ -607,16 +610,7 @@ fun PlayerLevelUpDialog(
                                 if (!finalPerks.contains(selectedNewPerk!!)) finalPerks.add(selectedNewPerk!!)
                             }
                             val finalStats = if (selectedChoiceType == LevelUpChoiceType.SPECIAL && selectedSpecialStat != null) {
-                                when (selectedSpecialStat!!.uppercase()) {
-                                    "FUE" -> currentStats.value.copy(fue = (currentStats.value.fue + 1).coerceAtMost(10))
-                                    "PER" -> currentStats.value.copy(per = (currentStats.value.per + 1).coerceAtMost(10))
-                                    "END" -> currentStats.value.copy(end = (currentStats.value.end + 1).coerceAtMost(10))
-                                    "CAR" -> currentStats.value.copy(car = (currentStats.value.car + 1).coerceAtMost(10))
-                                    "AGI" -> currentStats.value.copy(agi = (currentStats.value.agi + 1).coerceAtMost(10))
-                                    "INT" -> currentStats.value.copy(int = (currentStats.value.int + 1).coerceAtMost(10))
-                                    "SUE" -> currentStats.value.copy(sue = (currentStats.value.sue + 1).coerceAtMost(10))
-                                    else -> currentStats.value
-                                }
+                                currentStats.value.withIncrement(selectedSpecialStat!!, 1)
                             } else {
                                 currentStats.value
                             }

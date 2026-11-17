@@ -13,6 +13,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.mpergar9.kepler1652b.data.CampaignRepository
+import com.example.mpergar9.kepler1652b.model.Campaign
 import com.example.mpergar9.kepler1652b.ui.screens.*
 import com.example.mpergar9.kepler1652b.ui.screens.master.MasterCharacterDetailScreen
 
@@ -68,6 +69,13 @@ fun KeplerNavHost(
                 },
                 onCreateCharacterForCampaign = { campaign ->
                     navController.navigate(NavRoutes.characterCreation(campaign.id))
+                },
+                onCreateStandaloneCharacter = {
+                    navController.navigate(NavRoutes.characterCreation("standalone"))
+                },
+                onSelectSavedCharacter = { selectedChar ->
+                    val targetCampId = selectedChar.campaignId.ifBlank { "standalone" }
+                    navController.navigate(NavRoutes.playerSheet(targetCampId, selectedChar.id))
                 },
                 onSignOut = {
                     CampaignRepository.signOut()
@@ -153,8 +161,11 @@ fun KeplerNavHost(
             val campaignId = backStackEntry.arguments?.getString("campaignId") ?: ""
             val characterId = backStackEntry.arguments?.getString("characterId") ?: ""
             val campaign = campaigns.find { it.id == campaignId }
+                ?: Campaign(id = "", name = "Baúl Personal", description = "Ficha de personaje independiente")
             val character = characters.find { it.id == characterId }
-            if (campaign != null) {
+                ?: CampaignRepository.savedUserCharacters.collectAsState().value.find { it.id == characterId }
+
+            if (character != null) {
                 PlayerCharacterSheetScreen(
                     campaign = campaign,
                     selectedCharacter = character,
@@ -169,15 +180,14 @@ fun KeplerNavHost(
         ) { backStackEntry ->
             val campaignId = backStackEntry.arguments?.getString("campaignId") ?: ""
             val campaign = campaigns.find { it.id == campaignId }
-            if (campaign != null) {
-                CharacterCreationScreen(
-                    campaign = campaign,
-                    onCharacterCreated = {
-                        navController.popBackStack()
-                    },
-                    onBack = { navController.popBackStack() }
-                )
-            }
+            val targetCampaign = campaign ?: Campaign(id = "", name = "Baúl Personal", description = "Creación de personaje para el baúl de colonos")
+            CharacterCreationScreen(
+                campaign = targetCampaign,
+                onCharacterCreated = {
+                    navController.popBackStack()
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }

@@ -26,66 +26,76 @@ fun PlayerListDialog(
     characters: List<Character>,
     onDismiss: () -> Unit
 ) {
-    var playerToKick by remember { mutableStateOf<Character?>(null) }
+    var userToKick by remember { mutableStateOf<String?>(null) }
+    val joinedUsers = campaign.joinedPlayerIds.filter { it.isNotBlank() }.ifEmpty {
+        characters.map { it.playerId }.filter { it.isNotBlank() }.distinct().ifEmpty {
+            listOf(campaign.masterId).filter { it.isNotBlank() }
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "👥 Tripulación Conectada",
+                text = "👥 Colonos Conectados",
                 fontWeight = FontWeight.Bold,
                 color = CyanCurvature
             )
         },
         text = {
-            if (characters.isEmpty()) {
+            if (joinedUsers.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxWidth().height(150.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No hay tripulantes conectados en esta campaña.", color = TextMuted, fontSize = 12.sp)
+                    Text("No hay usuarios registrados en esta campaña.", color = TextMuted, fontSize = 12.sp)
                 }
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.height(220.dp)
                 ) {
-                    items(characters) { ch ->
+                    items(joinedUsers, key = { it }) { uid ->
+                        val assignedChar = characters.find { it.playerId == uid }
+                        val userName = assignedChar?.playerName?.ifBlank { null } 
+                            ?: if (uid == campaign.masterId) campaign.masterName else "Colono ($uid)"
+                        val isMasterUser = uid == campaign.masterId
+
                         Surface(
                             color = VoidBlack,
-                            shape = RoundedCornerShape(4.dp),
+                            shape = RoundedCornerShape(6.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(8.dp),
+                                modifier = Modifier.padding(10.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text(
+                                            text = userName,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary,
+                                            fontSize = 13.sp
+                                        )
+                                        if (isMasterUser) {
+                                            Text("(Máster)", fontSize = 10.sp, color = WarningAmber, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                     Text(
-                                        text = ch.characterName,
-                                        fontWeight = FontWeight.Bold,
-                                        color = TextPrimary,
-                                        fontSize = 12.sp
-                                    )
-                                    Text(
-                                        text = "${ch.characterClass} • ${ch.playerName}",
-                                        color = TextSecondary,
-                                        fontSize = 10.sp
+                                        text = if (assignedChar != null) "PJ: ${assignedChar.characterName} (${assignedChar.characterClass})" else "Sin personaje asignado",
+                                        color = if (assignedChar != null) CyanCurvature else TextMuted,
+                                        fontSize = 11.sp
                                     )
                                 }
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Text(if (ch.isAlive) "💚" else "💀", fontSize = 11.sp)
-                                    if (campaign.isCurrentUserMaster) {
-                                        IconButton(
-                                            onClick = { playerToKick = ch },
-                                            modifier = Modifier.size(24.dp)
-                                        ) {
-                                            Text("🗑️", fontSize = 11.sp)
-                                        }
+
+                                if (campaign.isCurrentUserMaster && !isMasterUser) {
+                                    IconButton(
+                                        onClick = { userToKick = uid },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Text("🗑️", fontSize = 12.sp)
                                     }
                                 }
                             }
@@ -105,17 +115,18 @@ fun PlayerListDialog(
         containerColor = DeepSpaceBlue
     )
 
-    playerToKick?.let { ch ->
+    userToKick?.let { uid ->
+        val charToKick = characters.find { it.playerId == uid }
         DeleteConfirmationDialog(
-            title = "¿Expulsar Tripulante?",
-            message = "¿Estás seguro de expulsar a '${ch.characterName}' (${ch.playerName}) de la campaña?",
+            title = "¿Expulsar Usuario?",
+            message = "¿Estás seguro de expulsar a este usuario de la campaña?",
             confirmText = "Expulsar",
             cancelText = "Cancelar",
             onConfirm = {
-                CampaignRepository.removePlayerFromCampaign(campaign.id, ch.playerId, ch.id)
-                playerToKick = null
+                CampaignRepository.removePlayerFromCampaign(campaign.id, uid, charToKick?.id)
+                userToKick = null
             },
-            onDismiss = { playerToKick = null }
+            onDismiss = { userToKick = null }
         )
     }
 }

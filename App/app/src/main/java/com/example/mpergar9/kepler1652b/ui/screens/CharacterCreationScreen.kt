@@ -113,13 +113,11 @@ fun CharacterCreationScreen(
 
     val extraSelectedPerks = remember { mutableStateListOf<String>() }
 
-    val finalSkills: Map<String, Int> = remember(customSkillAllocations, currentSubclass) {
-        val map = currentSubclass.requiredSkills.toMutableMap()
+    val finalSkills: Map<String, Int> = buildMap {
+        putAll(currentSubclass.requiredSkills)
         customSkillAllocations.forEach { (sk, added) ->
-            val cur = map[sk] ?: 0
-            map[sk] = cur + added
+            put(sk, (get(sk) ?: 0) + added)
         }
-        map.toMap()
     }
 
     val sumAssignedSkillPoints = customSkillAllocations.values.sum()
@@ -189,7 +187,7 @@ fun CharacterCreationScreen(
                     item {
                         Step2SpecialCard(
                             rollInputText = rollInputText,
-                            onRollChange = { rollInputText = it },
+                            onRollChange = { input -> rollInputText = input.filter { it.isDigit() }.take(2) },
                             remainingPoints = remainingSpecialPoints,
                             fue = statFue, onFueChange = { statFue = it },
                             per = statPer, onPerChange = { statPer = it },
@@ -237,9 +235,13 @@ fun CharacterCreationScreen(
                                 selectedClassIndex = idx
                                 val firstAllowed = KeplerGameData.CLASSES[idx].subclasses.indexOfFirst { currentStats.meetsRequirements(it.requiredStats) }
                                 selectedSubclassIndex = if (firstAllowed >= 0) firstAllowed else 0
+                                customSkillAllocations.clear()
                             },
                             selectedSubclassIndex = selectedSubclassIndex,
-                            onSelectSubclass = { idx -> selectedSubclassIndex = idx }
+                            onSelectSubclass = { idx ->
+                                selectedSubclassIndex = idx
+                                customSkillAllocations.clear()
+                            }
                         )
                     }
                     item {
@@ -339,13 +341,13 @@ fun CharacterCreationScreen(
                                 onClick = {
                                     if (isStep5Valid) {
                                         val finalStats = SpecialStats(
-                                            fue = statFue + extraFue,
-                                            per = statPer + extraPer,
-                                            end = statEnd + extraEnd,
-                                            car = statCar + extraCar,
-                                            agi = statAgi + extraAgi,
-                                            int = statInt + extraInt,
-                                            sue = statSue + extraSue
+                                            fue = (statFue + extraFue).coerceIn(1, 10),
+                                            per = (statPer + extraPer).coerceIn(1, 10),
+                                            end = (statEnd + extraEnd).coerceIn(1, 10),
+                                            car = (statCar + extraCar).coerceIn(1, 10),
+                                            agi = (statAgi + extraAgi).coerceIn(1, 10),
+                                            int = (statInt + extraInt).coerceIn(1, 10),
+                                            sue = (statSue + extraSue).coerceIn(1, 10)
                                         )
                                         val allPerks = (listOf(currentSubclass.initialPerkName) + extraSelectedPerks)
                                             .filter { it.isNotBlank() && !it.contains("Ninguno") }
